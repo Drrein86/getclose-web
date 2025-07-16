@@ -1,0 +1,994 @@
+"use client";
+
+import { useState } from "react";
+import {
+  Store,
+  Plus,
+  Eye,
+  Edit,
+  Trash2,
+  TrendingUp,
+  Users,
+  Package,
+  DollarSign,
+  Star,
+  Heart,
+  MessageCircle,
+  Settings,
+  BarChart3,
+  Search,
+  Filter,
+  Upload,
+  Save,
+  X,
+  ShoppingCart,
+  Tag,
+  Palette,
+  Ruler,
+  FileText,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Product, ProductCategory, Size, Color } from "@/src/types";
+
+interface MyItem {
+  id: string;
+  title: string;
+  price: number;
+  condition: string;
+  category: string;
+  status: "active" | "sold" | "draft";
+  views: number;
+  likes: number;
+  messages: number;
+  postedDate: Date;
+  image: string;
+}
+
+interface StoreStats {
+  totalProducts: number;
+  totalSales: number;
+  totalRevenue: number;
+  totalViews: number;
+  averageRating: number;
+  pendingOrders: number;
+}
+
+export default function MyStorePage() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "products" | "categories" | "orders" | "analytics"
+  >("dashboard");
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  // נתוני דמה למוצרים
+  const [products, setProducts] = useState<Product[]>([
+    {
+      id: "1",
+      storeId: "store-1",
+      name: "חולצה כחולה מעוצבת",
+      description: "חולצה איכותית עשויה כותנה 100%, מתאימה לכל המזדמנויות",
+      price: 89,
+      originalPrice: 120,
+      images: ["https://via.placeholder.com/300x300?text=חולצה+כחולה"],
+      category: { id: "1", name: "חולצות", icon: "👕" },
+      subcategory: "חולצות יום יום",
+      brand: "המותג שלי",
+      sizes: [
+        { id: "s", name: "S", type: "clothing", isAvailable: true },
+        { id: "m", name: "M", type: "clothing", isAvailable: true },
+        { id: "l", name: "L", type: "clothing", isAvailable: false },
+      ],
+      colors: [
+        { id: "blue", name: "כחול", hexCode: "#3B82F6", isAvailable: true },
+        { id: "navy", name: "כחול כהה", hexCode: "#1E3A8A", isAvailable: true },
+      ],
+      tags: ["כותנה", "נוח", "יום יום"],
+      inStock: true,
+      stockQuantity: 15,
+      rating: 4.5,
+      reviewCount: 23,
+      isOnSale: true,
+      saleEndDate: new Date("2024-12-31"),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: "2",
+      storeId: "store-1",
+      name: "מכנסיים שחורים אלגנטיים",
+      description: "מכנסיים אלגנטיים למשרד ולאירועים מיוחדים",
+      price: 149,
+      images: ["https://via.placeholder.com/300x300?text=מכנסיים+שחורים"],
+      category: { id: "2", name: "מכנסיים", icon: "👖" },
+      brand: "המותג שלי",
+      sizes: [
+        { id: "30", name: "30", type: "clothing", isAvailable: true },
+        { id: "32", name: "32", type: "clothing", isAvailable: true },
+        { id: "34", name: "34", type: "clothing", isAvailable: true },
+      ],
+      colors: [
+        { id: "black", name: "שחור", hexCode: "#000000", isAvailable: true },
+      ],
+      tags: ["אלגנטי", "משרד", "פורמלי"],
+      inStock: true,
+      stockQuantity: 8,
+      rating: 4.8,
+      reviewCount: 12,
+      isOnSale: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ]);
+
+  const [myItems] = useState<MyItem[]>([
+    {
+      id: "1",
+      title: "חולצת זארה כמו חדשה",
+      price: 45,
+      condition: "כמו חדש",
+      category: "חולצות",
+      status: "active",
+      views: 45,
+      likes: 8,
+      messages: 3,
+      postedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2),
+      image: "👕",
+    },
+    {
+      id: "2",
+      title: "נעלי נייקי ספורט",
+      price: 180,
+      condition: "מצב טוב",
+      category: "נעליים",
+      status: "sold",
+      views: 89,
+      likes: 15,
+      messages: 12,
+      postedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5),
+      image: "👟",
+    },
+    {
+      id: "3",
+      title: "שמלת ערב שחורה",
+      price: 120,
+      condition: "כמו חדש",
+      category: "שמלות",
+      status: "draft",
+      views: 0,
+      likes: 0,
+      messages: 0,
+      postedDate: new Date(),
+      image: "👗",
+    },
+  ]);
+
+  const [categories, setCategories] = useState<ProductCategory[]>([
+    { id: "1", name: "חולצות", icon: "👕" },
+    { id: "2", name: "מכנסיים", icon: "👖" },
+    { id: "3", name: "שמלות", icon: "👗" },
+    { id: "4", name: "נעליים", icon: "👟" },
+    { id: "5", name: "אקססוריז", icon: "👜" },
+  ]);
+
+  const stats: StoreStats = {
+    totalProducts: myItems.length,
+    totalSales: 156,
+    totalRevenue: 12450,
+    totalViews: 2340,
+    averageRating: 4.6,
+    pendingOrders: 8,
+  };
+
+  const [productForm, setProductForm] = useState({
+    name: "",
+    description: "",
+    price: "",
+    originalPrice: "",
+    category: "",
+    subcategory: "",
+    brand: "",
+    tags: "",
+    stockQuantity: "",
+    images: [] as string[],
+    sizes: [] as string[],
+    colors: [] as { name: string; hexCode: string }[],
+  });
+
+  const handleSaveProduct = () => {
+    if (!productForm.name || !productForm.price || !productForm.category) {
+      alert("אנא מלא את כל השדות הנדרשים");
+      return;
+    }
+
+    const newProduct: Product = {
+      id: editingProduct?.id || Date.now().toString(),
+      storeId: "store-1",
+      name: productForm.name,
+      description: productForm.description,
+      price: parseFloat(productForm.price),
+      originalPrice: productForm.originalPrice
+        ? parseFloat(productForm.originalPrice)
+        : undefined,
+      images:
+        productForm.images.length > 0
+          ? productForm.images
+          : ["https://via.placeholder.com/300x300?text=" + productForm.name],
+      category:
+        categories.find((c) => c.id === productForm.category) || categories[0],
+      subcategory: productForm.subcategory,
+      brand: productForm.brand,
+      sizes: productForm.sizes.map((s) => ({
+        id: s,
+        name: s,
+        type: "clothing" as const,
+        isAvailable: true,
+      })),
+      colors: productForm.colors.map((c, i) => ({
+        id: i.toString(),
+        name: c.name,
+        hexCode: c.hexCode,
+        isAvailable: true,
+      })),
+      tags: productForm.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+      inStock: true,
+      stockQuantity: parseInt(productForm.stockQuantity) || 0,
+      rating: 0,
+      reviewCount: 0,
+      isOnSale: productForm.originalPrice
+        ? parseFloat(productForm.originalPrice) > parseFloat(productForm.price)
+        : false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    if (editingProduct) {
+      setProducts(
+        products.map((p) => (p.id === editingProduct.id ? newProduct : p))
+      );
+    } else {
+      setProducts([...products, newProduct]);
+    }
+
+    setProductForm({
+      name: "",
+      description: "",
+      price: "",
+      originalPrice: "",
+      category: "",
+      subcategory: "",
+      brand: "",
+      tags: "",
+      stockQuantity: "",
+      images: [],
+      sizes: [],
+      colors: [],
+    });
+    setShowAddProduct(false);
+    setEditingProduct(null);
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setProductForm({
+      name: product.name,
+      description: product.description,
+      price: product.price.toString(),
+      originalPrice: product.originalPrice?.toString() || "",
+      category: product.category.id,
+      subcategory: product.subcategory || "",
+      brand: product.brand || "",
+      tags: product.tags.join(", "),
+      stockQuantity: product.stockQuantity.toString(),
+      images: product.images,
+      sizes: product.sizes.map((s) => s.name),
+      colors: product.colors.map((c) => ({ name: c.name, hexCode: c.hexCode })),
+    });
+    setShowAddProduct(true);
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    if (confirm("האם אתה בטוח שברצונך למחוק את המוצר?")) {
+      setProducts(products.filter((p) => p.id !== productId));
+    }
+  };
+
+  const addColor = () => {
+    setProductForm({
+      ...productForm,
+      colors: [...productForm.colors, { name: "", hexCode: "#000000" }],
+    });
+  };
+
+  const updateColor = (
+    index: number,
+    field: "name" | "hexCode",
+    value: string
+  ) => {
+    const newColors = [...productForm.colors];
+    newColors[index][field] = value;
+    setProductForm({ ...productForm, colors: newColors });
+  };
+
+  const removeColor = (index: number) => {
+    setProductForm({
+      ...productForm,
+      colors: productForm.colors.filter((_, i) => i !== index),
+    });
+  };
+
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch =
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory =
+      selectedCategory === "all" || product.category.id === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 min-h-screen overflow-y-auto">
+      {/* Header */}
+      <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center">
+              <Store className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">ניהול החנות שלי</h1>
+              <p className="text-gray-600">נהל את המוצרים והמכירות שלך</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAddProduct(true)}
+            className="bg-purple-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-purple-700 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            הוסף מוצר חדש
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2">
+          {[
+            { key: "dashboard", label: "לוח בקרה", icon: BarChart3 },
+            { key: "products", label: "מוצרים", icon: Package },
+            { key: "categories", label: "קטגוריות", icon: Tag },
+            { key: "orders", label: "הזמנות", icon: ShoppingCart },
+            { key: "analytics", label: "אנליטיקס", icon: TrendingUp },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors ${
+                activeTab === tab.key
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Dashboard */}
+      {activeTab === "dashboard" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <Package className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-gray-600">סך המוצרים</p>
+                <p className="text-2xl font-bold">{stats.totalProducts}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <ShoppingCart className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-gray-600">סך המכירות</p>
+                <p className="text-2xl font-bold">{stats.totalSales}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-gray-600">סך ההכנסות</p>
+                <p className="text-2xl font-bold">
+                  ₪{stats.totalRevenue.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                <Eye className="w-6 h-6 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-gray-600">צפיות</p>
+                <p className="text-2xl font-bold">
+                  {stats.totalViews.toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
+                <Star className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div>
+                <p className="text-gray-600">דירוג ממוצע</p>
+                <p className="text-2xl font-bold">{stats.averageRating}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                <Users className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <p className="text-gray-600">הזמנות ממתינות</p>
+                <p className="text-2xl font-bold">{stats.pendingOrders}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Products Tab */}
+      {activeTab === "products" && (
+        <div className="space-y-6">
+          {/* Search and Filter */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="חפש מוצרים..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pr-10 pl-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="all">כל הקטגוריות</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Products Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProducts.map((product) => (
+              <div
+                key={product.id}
+                className="bg-white rounded-2xl shadow-lg overflow-hidden"
+              >
+                <div className="relative">
+                  <img
+                    src={product.images[0]}
+                    alt={product.name}
+                    className="w-full h-48 object-cover"
+                  />
+                  <div className="absolute top-3 left-3 flex gap-2">
+                    <button
+                      onClick={() => handleEditProduct(product)}
+                      className="bg-white/80 p-2 rounded-lg hover:bg-white transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProduct(product.id)}
+                      className="bg-white/80 p-2 rounded-lg hover:bg-white transition-colors text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <h3 className="font-bold text-lg mb-2">{product.name}</h3>
+                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                    {product.description}
+                  </p>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-primary-600">
+                        ₪{product.price}
+                      </span>
+                      {product.originalPrice && (
+                        <span className="text-gray-500 line-through">
+                          ₪{product.originalPrice}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                      <span className="text-sm">{product.rating}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-gray-600">
+                    <span>מלאי: {product.stockQuantity}</span>
+                    <span className="bg-gray-100 px-2 py-1 rounded-lg">
+                      {product.category.name}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Categories Tab */}
+      {activeTab === "categories" && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">ניהול קטגוריות</h2>
+              <button className="bg-primary-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-primary-700">
+                <Plus className="w-4 h-4" />
+                הוסף קטגוריה
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {categories.map((category) => (
+                <div
+                  key={category.id}
+                  className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="text-2xl">{category.icon}</div>
+                    <div>
+                      <h3 className="font-medium">{category.name}</h3>
+                      <p className="text-sm text-gray-600">
+                        {
+                          products.filter((p) => p.category.id === category.id)
+                            .length
+                        }{" "}
+                        מוצרים
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="flex-1 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg text-sm">
+                      ערוך
+                    </button>
+                    <button className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Orders Tab */}
+      {activeTab === "orders" && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-xl font-bold mb-6">הזמנות אחרונות</h2>
+            <div className="text-center py-12">
+              <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-medium text-gray-600 mb-2">
+                אין הזמנות חדשות
+              </h3>
+              <p className="text-gray-500">
+                כאשר לקוחות יזמינו מוצרים, הם יופיעו כאן
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Tab */}
+      {activeTab === "analytics" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <h3 className="text-lg font-bold mb-4">מוצרים פופולריים</h3>
+              <div className="space-y-3">
+                {products.slice(0, 5).map((product) => (
+                  <div key={product.id} className="flex items-center gap-3">
+                    <img
+                      src={product.images[0]}
+                      alt={product.name}
+                      className="w-12 h-12 rounded-lg object-cover"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium">{product.name}</p>
+                      <p className="text-sm text-gray-600">₪{product.price}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">{product.reviewCount}</p>
+                      <p className="text-sm text-gray-600">ביקורות</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <h3 className="text-lg font-bold mb-4">ביצועים</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">מוצרים במבצע</span>
+                  <span className="font-medium">
+                    {products.filter((p) => p.isOnSale).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">מוצרים במלאי</span>
+                  <span className="font-medium">
+                    {products.filter((p) => p.inStock).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">דירוג ממוצע</span>
+                  <span className="font-medium flex items-center gap-1">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    {(
+                      products.reduce((sum, p) => sum + p.rating, 0) /
+                      products.length
+                    ).toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Product Modal */}
+      {showAddProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold">
+                  {editingProduct ? "עריכת מוצר" : "הוספת מוצר חדש"}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowAddProduct(false);
+                    setEditingProduct(null);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    שם המוצר *
+                  </label>
+                  <input
+                    type="text"
+                    value={productForm.name}
+                    onChange={(e) =>
+                      setProductForm({ ...productForm, name: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="הכנס שם מוצר"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">מותג</label>
+                  <input
+                    type="text"
+                    value={productForm.brand}
+                    onChange={(e) =>
+                      setProductForm({ ...productForm, brand: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="שם המותג"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  תיאור המוצר
+                </label>
+                <textarea
+                  value={productForm.description}
+                  onChange={(e) =>
+                    setProductForm({
+                      ...productForm,
+                      description: e.target.value,
+                    })
+                  }
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="תיאור מפורט של המוצר"
+                />
+              </div>
+
+              {/* Pricing */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    מחיר *
+                  </label>
+                  <input
+                    type="number"
+                    value={productForm.price}
+                    onChange={(e) =>
+                      setProductForm({ ...productForm, price: e.target.value })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    מחיר מקורי (למבצע)
+                  </label>
+                  <input
+                    type="number"
+                    value={productForm.originalPrice}
+                    onChange={(e) =>
+                      setProductForm({
+                        ...productForm,
+                        originalPrice: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    כמות במלאי *
+                  </label>
+                  <input
+                    type="number"
+                    value={productForm.stockQuantity}
+                    onChange={(e) =>
+                      setProductForm({
+                        ...productForm,
+                        stockQuantity: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {/* Category */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    קטגוריה *
+                  </label>
+                  <select
+                    value={productForm.category}
+                    onChange={(e) =>
+                      setProductForm({
+                        ...productForm,
+                        category: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">בחר קטגוריה</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    תת-קטגוריה
+                  </label>
+                  <input
+                    type="text"
+                    value={productForm.subcategory}
+                    onChange={(e) =>
+                      setProductForm({
+                        ...productForm,
+                        subcategory: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="תת-קטגוריה"
+                  />
+                </div>
+              </div>
+
+              {/* Sizes */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  מידות זמינות
+                </label>
+                <input
+                  type="text"
+                  value={productForm.sizes.join(", ")}
+                  onChange={(e) =>
+                    setProductForm({
+                      ...productForm,
+                      sizes: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="S, M, L, XL או 36, 37, 38"
+                />
+              </div>
+
+              {/* Colors */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  צבעים זמינים
+                </label>
+                <div className="space-y-2">
+                  {productForm.colors.map((color, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={color.name}
+                        onChange={(e) =>
+                          updateColor(index, "name", e.target.value)
+                        }
+                        className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="שם הצבע"
+                      />
+                      <input
+                        type="color"
+                        value={color.hexCode}
+                        onChange={(e) =>
+                          updateColor(index, "hexCode", e.target.value)
+                        }
+                        className="w-12 h-10 border border-gray-200 rounded-xl cursor-pointer"
+                      />
+                      <button
+                        onClick={() => removeColor(index)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addColor}
+                    className="flex items-center gap-2 px-4 py-2 text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50"
+                  >
+                    <Plus className="w-4 h-4" />
+                    הוסף צבע
+                  </button>
+                </div>
+              </div>
+
+              {/* Images */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  תמונות המוצר
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
+                  <Camera className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">
+                    העלה תמונות המוצר
+                  </h3>
+                  <p className="text-gray-500 mb-4">
+                    גרור ושחרר תמונות כאן או לחץ לבחירה
+                  </p>
+                  <button
+                    type="button"
+                    className="bg-primary-600 text-white px-6 py-2 rounded-xl hover:bg-primary-700"
+                  >
+                    בחר תמונות
+                  </button>
+                </div>
+                {productForm.images.length > 0 && (
+                  <div className="grid grid-cols-3 gap-3 mt-4">
+                    {productForm.images.map((image, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={image}
+                          alt={`תמונה ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                        <button
+                          onClick={() =>
+                            setProductForm({
+                              ...productForm,
+                              images: productForm.images.filter(
+                                (_, i) => i !== index
+                              ),
+                            })
+                          }
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="block text-sm font-medium mb-2">תגיות</label>
+                <input
+                  type="text"
+                  value={productForm.tags}
+                  onChange={(e) =>
+                    setProductForm({ ...productForm, tags: e.target.value })
+                  }
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="תגיות מופרדות בפסיק: כותנה, נוח, יום יום"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAddProduct(false);
+                  setEditingProduct(null);
+                }}
+                className="px-6 py-3 border border-gray-200 rounded-xl hover:bg-gray-50"
+              >
+                ביטול
+              </button>
+              <button
+                onClick={handleSaveProduct}
+                className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {editingProduct ? "עדכן מוצר" : "הוסף מוצר"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
