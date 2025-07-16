@@ -26,6 +26,7 @@ import {
   Palette,
   Ruler,
   FileText,
+  Camera,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Product, ProductCategory, Size, Color } from "@/src/types";

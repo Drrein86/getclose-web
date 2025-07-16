@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   IoArrowBackOutline,
@@ -360,7 +360,7 @@ const popularBrands = [
   },
 ];
 
-export default function CategoriesPage() {
+function CategoriesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -692,3 +692,13 @@ export default function CategoriesPage() {
     </div>
   );
 }
+
+function CategoriesPageWrapper() {
+  return (
+    <Suspense fallback={<div>טוען...</div>}>
+      <CategoriesPage />
+    </Suspense>
+  );
+}
+
+export default CategoriesPageWrapper;
