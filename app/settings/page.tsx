@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getUserTypeInfo } from "@/src/utils/userPermissions";
-import { useUser } from "@/src/contexts/UserContext";
 import {
   IoNotificationsOutline,
   IoGlobeOutline,
@@ -24,11 +23,29 @@ import {
   IoTrophyOutline,
   IoDiamondOutline,
 } from "react-icons/io5";
+import { CgSpinner } from "react-icons/cg";
+import { UserType } from "@/src/utils/userPermissions";
+import { User } from "@/src/types";
+import { getUserById } from "@/src/lib/database";
+
+interface UserSettings {
+  notifications: {
+    newArrivals: boolean;
+    sales: boolean;
+    orderUpdates: boolean;
+    backInStock: boolean;
+  };
+  language: string;
+  theme: string;
+  sizeSystem: string;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { userType, toggleSecondhandStore, setUserType } = useUser();
-  const [settings, setSettings] = useState({
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [settings, setSettings] = useState<UserSettings>({
     notifications: {
       newArrivals: true,
       sales: true,
@@ -40,20 +57,105 @@ export default function SettingsPage() {
     sizeSystem: "eu",
   });
 
-  const toggleNotification = (key: keyof typeof settings.notifications) => {
-    setSettings((prev) => ({
-      ...prev,
-      notifications: {
-        ...prev.notifications,
-        [key]: !prev.notifications[key],
-      },
-    }));
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      // בשלב זה אנחנו נשתמש במשתמש קבוע עד שתהיה מערכת התחברות
+      // בפרויקט אמיתי זה יהיה מ-session או token
+      const userData = await getUserById("1"); // משתמש לדוגמא
+      if (userData) {
+        // המרת UserType מ-Prisma לטיפוס המקומי
+        const userTypeMapping: { [key: string]: UserType } = {
+          CUSTOMER: "customer",
+          STORE_OWNER: "store",
+          SECONDHAND_SELLER: "secondhand",
+          HYBRID: "hybrid",
+          ADMIN: "",
+        };
+
+        const mappedUser = {
+          ...userData,
+          userType: userTypeMapping[userData.userType] || "customer",
+        };
+
+        setUser(mappedUser as unknown as User);
+
+        // טעינת הגדרות ברירת מחדל מכיוון שאין settings table עדיין
+        setSettings({
+          notifications: {
+            newArrivals: true,
+            sales: true,
+            orderUpdates: true,
+            backInStock: false,
+          },
+          language: "he",
+          theme: "light",
+          sizeSystem: "eu",
+        });
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSettings = async (newSettings: Partial<UserSettings>) => {
+    if (!user) return;
+
+    setSaving(true);
+    try {
+      // כרגע נשמור רק ב-localStorage עד שתהיה settings table
+      const currentSettings = JSON.parse(
+        localStorage.getItem("userSettings") || "{}"
+      );
+      const updatedSettings = { ...currentSettings, ...newSettings };
+      localStorage.setItem("userSettings", JSON.stringify(updatedSettings));
+      console.log("Settings saved successfully");
+    } catch (error) {
+      console.error("Error saving settings:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleNotification = async (
+    key: keyof typeof settings.notifications
+  ) => {
+    const newNotifications = {
+      ...settings.notifications,
+      [key]: !settings.notifications[key],
+    };
+    const newSettings = { ...settings, notifications: newNotifications };
+    setSettings(newSettings);
+    await saveSettings({ notifications: newNotifications });
+  };
+
+  const updateLanguage = async (language: string) => {
+    const newSettings = { ...settings, language };
+    setSettings(newSettings);
+    await saveSettings({ language });
+  };
+
+  const updateTheme = async (theme: string) => {
+    const newSettings = { ...settings, theme };
+    setSettings(newSettings);
+    await saveSettings({ theme });
+  };
+
+  const updateSizeSystem = async (sizeSystem: string) => {
+    const newSettings = { ...settings, sizeSystem };
+    setSettings(newSettings);
+    await saveSettings({ sizeSystem });
   };
 
   const getCurrentUserType = () => {
-    // נשתמש במערכת ההרשאות החדשה
-    const userInfo = getUserTypeInfo(userType);
+    if (!user) return null;
 
+    const userInfo = getUserTypeInfo(user.userType as UserType);
     return {
       icon: IoPersonOutline,
       label: userInfo.label,
@@ -72,22 +174,60 @@ export default function SettingsPage() {
         "האם אתה בטוח שברצונך לשנות את סוג החשבון? זה יפנה אותך לדף הבחירה."
       )
     ) {
-      localStorage.removeItem("userType");
       router.push("/user-type");
+    }
+  };
+
+  const canShowSecondhandStore = () => {
+    return user?.userType === "CUSTOMER" || user?.userType === "HYBRID";
+  };
+
+  const hasSecondhandStore = () => {
+    return (
+      user?.userType === "SECONDHAND_SELLER" || user?.userType === "HYBRID"
+    );
+  };
+
+  const toggleSecondhandStore = async () => {
+    if (!user) return;
+
+    const newUserType = hasSecondhandStore()
+      ? user.userType === "HYBRID"
+        ? "STORE_OWNER"
+        : "CUSTOMER"
+      : user.userType === "STORE_OWNER"
+      ? "HYBRID"
+      : "SECONDHAND_SELLER";
+
+    try {
+      // כאן נעדכן את סוג המשתמש במסד הנתונים
+      // await updateUserType(user.id, newUserType);
+
+      // עדכון זמני עד שתהיה API function
+      setUser({ ...user, userType: newUserType as any });
+    } catch (error) {
+      console.error("Error toggling secondhand store:", error);
     }
   };
 
   const ToggleSwitch = ({
     isOn,
     onToggle,
+    disabled = false,
   }: {
     isOn: boolean;
     onToggle: () => void;
+    disabled?: boolean;
   }) => (
     <button
       onClick={onToggle}
+      disabled={disabled}
       className={`relative w-14 h-7 rounded-full transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-gray-300 ${
-        isOn ? "bg-black" : "bg-gray-300"
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : isOn
+          ? "bg-black"
+          : "bg-gray-300"
       }`}
     >
       <div
@@ -103,6 +243,33 @@ export default function SettingsPage() {
       </div>
     </button>
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white p-4 flex items-center justify-center">
+        <div className="text-center">
+          <CgSpinner className="w-12 h-12 text-gray-600 animate-spin mx-auto mb-4" />
+          <p className="text-lg text-gray-600">טוען הגדרות...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white p-4 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg text-red-600 mb-4">שגיאה בטעינת נתוני המשתמש</p>
+          <button
+            onClick={() => router.push("/user-type")}
+            className="btn-primary"
+          >
+            התחבר מחדש
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white p-4">
@@ -126,6 +293,12 @@ export default function SettingsPage() {
           <p className="text-gray-600 text-lg">
             התאם את האפליקציה בדיוק כפי שאתה רוצה
           </p>
+          {saving && (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <CgSpinner className="w-4 h-4 text-blue-600 animate-spin" />
+              <span className="text-blue-600 text-sm">שומר הגדרות...</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -141,55 +314,62 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div
-              className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${
-                getCurrentUserType().bgColor
-              } p-6 mb-6 border border-gray-200`}
-            >
-              <div className="absolute inset-0 bg-white/50 backdrop-blur-sm" />
-              <div className="relative flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`w-16 h-16 ${
-                      getCurrentUserType().color
-                    } rounded-2xl flex items-center justify-center animate-pulse-custom`}
-                  >
-                    {(() => {
-                      const IconComponent = getCurrentUserType().icon;
-                      return <IconComponent className="w-8 h-8 text-white" />;
-                    })()}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-1">
-                      {getCurrentUserType().label}
-                    </h3>
-                    <p className="text-gray-600 flex items-center gap-1 mb-2">
-                      <IoTrophyOutline className="w-4 h-4" />
-                      {getCurrentUserType().description}
-                    </p>
-                    {getCurrentUserType().features && (
-                      <div className="flex flex-wrap gap-1">
-                        {getCurrentUserType().features.map((feature, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
-                          >
-                            {feature}
-                          </span>
-                        ))}
+            {getCurrentUserType() && (
+              <div
+                className={`relative overflow-hidden rounded-2xl bg-gradient-to-r ${
+                  getCurrentUserType()!.bgColor
+                } p-6 mb-6 border border-gray-200`}
+              >
+                <div className="absolute inset-0 bg-white/50 backdrop-blur-sm" />
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`w-16 h-16 ${
+                        getCurrentUserType()!.color
+                      } rounded-2xl flex items-center justify-center animate-pulse-custom`}
+                    >
+                      {(() => {
+                        const IconComponent = getCurrentUserType()!.icon;
+                        return <IconComponent className="w-8 h-8 text-white" />;
+                      })()}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-1">
+                        {getCurrentUserType()!.label}
+                      </h3>
+                      <p className="text-gray-600 flex items-center gap-1 mb-2">
+                        <IoTrophyOutline className="w-4 h-4" />
+                        {getCurrentUserType()!.description}
+                      </p>
+                      <div className="text-sm text-gray-500 mb-2">
+                        {user.email}
                       </div>
-                    )}
+                      {getCurrentUserType()!.features && (
+                        <div className="flex flex-wrap gap-1">
+                          {getCurrentUserType()!.features.map(
+                            (feature, index) => (
+                              <span
+                                key={index}
+                                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                              >
+                                {feature}
+                              </span>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={handleChangeUserType}
+                    className="btn-primary hover-scale flex items-center gap-2"
+                  >
+                    <IoDiamondOutline className="w-4 h-4" />
+                    שנה סוג חשבון
+                  </button>
                 </div>
-                <button
-                  onClick={handleChangeUserType}
-                  className="btn-primary hover-scale flex items-center gap-2"
-                >
-                  <IoDiamondOutline className="w-4 h-4" />
-                  שנה סוג חשבון
-                </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Notifications Section */}
@@ -261,6 +441,7 @@ export default function SettingsPage() {
                         item.key as keyof typeof settings.notifications
                       )
                     }
+                    disabled={saving}
                   />
                 </div>
               ))}
@@ -285,10 +466,9 @@ export default function SettingsPage() {
             <div className="relative">
               <select
                 value={settings.language}
-                onChange={(e) =>
-                  setSettings((prev) => ({ ...prev, language: e.target.value }))
-                }
-                className="w-full p-4 bg-gradient-to-r from-gray-50 to-white border-2 border-gray-200 rounded-xl focus:border-gray-500 focus:outline-none transition-all duration-300 text-lg font-medium appearance-none cursor-pointer hover-lift"
+                onChange={(e) => updateLanguage(e.target.value)}
+                disabled={saving}
+                className="w-full p-4 bg-gradient-to-r from-gray-50 to-white border-2 border-gray-200 rounded-xl focus:border-gray-500 focus:outline-none transition-all duration-300 text-lg font-medium appearance-none cursor-pointer hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="he">🇮🇱 עברית</option>
                 <option value="en">🇺🇸 English</option>
@@ -333,10 +513,9 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <button
-                onClick={() =>
-                  setSettings((prev) => ({ ...prev, theme: "light" }))
-                }
-                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift ${
+                onClick={() => updateTheme("light")}
+                disabled={saving}
+                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift disabled:opacity-50 disabled:cursor-not-allowed ${
                   settings.theme === "light"
                     ? "bg-black text-white border-black shadow-lg"
                     : "bg-white border-gray-200 text-gray-700 hover:border-gray-400"
@@ -347,10 +526,9 @@ export default function SettingsPage() {
                 <p className="text-sm opacity-75">מצב יום</p>
               </button>
               <button
-                onClick={() =>
-                  setSettings((prev) => ({ ...prev, theme: "dark" }))
-                }
-                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift ${
+                onClick={() => updateTheme("dark")}
+                disabled={saving}
+                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift disabled:opacity-50 disabled:cursor-not-allowed ${
                   settings.theme === "dark"
                     ? "bg-gray-900 text-white border-gray-700 shadow-lg"
                     : "bg-white border-gray-200 text-gray-700 hover:border-gray-400"
@@ -382,10 +560,9 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <button
-                onClick={() =>
-                  setSettings((prev) => ({ ...prev, sizeSystem: "eu" }))
-                }
-                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift ${
+                onClick={() => updateSizeSystem("eu")}
+                disabled={saving}
+                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift disabled:opacity-50 disabled:cursor-not-allowed ${
                   settings.sizeSystem === "eu"
                     ? "bg-black text-white border-black shadow-lg"
                     : "bg-white border-gray-200 text-gray-700 hover:border-gray-400"
@@ -396,10 +573,9 @@ export default function SettingsPage() {
                 <p className="text-sm opacity-75">מידות אירופאיות</p>
               </button>
               <button
-                onClick={() =>
-                  setSettings((prev) => ({ ...prev, sizeSystem: "us" }))
-                }
-                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift ${
+                onClick={() => updateSizeSystem("us")}
+                disabled={saving}
+                className={`p-6 rounded-xl border-2 transition-all duration-300 hover-lift disabled:opacity-50 disabled:cursor-not-allowed ${
                   settings.sizeSystem === "us"
                     ? "bg-gray-800 text-white border-gray-700 shadow-lg"
                     : "bg-white border-gray-200 text-gray-700 hover:border-gray-400"
@@ -412,8 +588,8 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Secondhand Store Settings - Only for customers */}
-          {userType === "customer" && (
+          {/* Secondhand Store Settings - Only for relevant user types */}
+          {canShowSecondhandStore() && (
             <div
               className="card animate-slideIn hover-lift"
               style={{ animationDelay: "0.5s" }}
@@ -443,13 +619,9 @@ export default function SettingsPage() {
                       </p>
                     </div>
                     <ToggleSwitch
-                      isOn={
-                        typeof window !== "undefined" &&
-                        localStorage.getItem("hasSecondhandStore") === "true"
-                      }
-                      onToggle={() => {
-                        toggleSecondhandStore();
-                      }}
+                      isOn={hasSecondhandStore()}
+                      onToggle={toggleSecondhandStore}
+                      disabled={saving}
                     />
                   </div>
 

@@ -66,8 +66,8 @@ export default function SearchPage() {
         const storeResults = mockStores.filter(
           (store) =>
             store.name.includes(searchQuery) ||
-            store.description.includes(searchQuery) ||
-            store.category.name.includes(searchQuery)
+            (store.description || "").includes(searchQuery) ||
+            (store.category?.name || "").includes(searchQuery)
         );
         results = [
           ...results,

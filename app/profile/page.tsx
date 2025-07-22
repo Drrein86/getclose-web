@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Camera,
   Edit2,
@@ -31,686 +31,459 @@ import {
   Calendar,
   Activity,
   Zap,
+  Loader2,
 } from "lucide-react";
+import {
+  getUserById,
+  getUserOrders,
+  getUserFavorites,
+} from "@/src/lib/database";
+import { User as UserType } from "@/src/types";
+import { UserType as LocalUserType } from "@/src/utils/userPermissions";
+
+interface UserStats {
+  ordersCount: number;
+  favoritesCount: number;
+  reviewsCount: number;
+  avgRating: number;
+}
 
 export default function ProfilePage() {
+  const [user, setUser] = useState<UserType | null>(null);
+  const [userStats, setUserStats] = useState<UserStats>({
+    ordersCount: 0,
+    favoritesCount: 0,
+    reviewsCount: 0,
+    avgRating: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState({
-    name: "ישראל ישראלי",
-    email: "israel@example.com",
-    phone: "050-1234567",
-    address: "רחוב הרצל 1, תל אביב",
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
     image: "👤",
-    joinDate: "2023-06-15",
-    membershipLevel: "Gold",
+    joinDate: "",
+    membershipLevel: "Bronze",
     sizes: {
       shirt: "M",
       pants: "32",
       shoes: "42",
     },
     preferences: {
-      newsletter: true,
-      smsNotifications: false,
-      emailNotifications: true,
-      personalizedOffers: true,
-    },
-    stats: {
-      totalOrders: 24,
-      totalSpent: 2850,
-      favoriteItems: 12,
-      reviewsWritten: 8,
-      loyaltyPoints: 1250,
+      notifications: true,
+      newsletter: false,
+      promotions: true,
     },
   });
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [isEditingSizes, setIsEditingSizes] = useState(false);
-  const [activeTab, setActiveTab] = useState("info");
+  useEffect(() => {
+    loadUserData();
+  }, []);
 
-  const handleSave = () => {
-    setIsEditing(false);
-  };
+  const loadUserData = async () => {
+    try {
+      // בשלב זה אנחנו נשתמש במשתמש קבוע עד שתהיה מערכת התחברות
+      const userData = await getUserById("1");
 
-  const handleSaveSizes = () => {
-    setIsEditingSizes(false);
-  };
+      if (userData) {
+        // המרת UserType מ-Prisma לטיפוס המקומי
+        const userTypeMapping: { [key: string]: LocalUserType } = {
+          CUSTOMER: "customer",
+          STORE_OWNER: "store",
+          SECONDHAND_SELLER: "secondhand",
+          HYBRID: "hybrid",
+          ADMIN: "",
+        };
 
-  const updatePreference = (key: string, value: boolean) => {
-    setProfile((prev) => ({
-      ...prev,
-      preferences: {
-        ...prev.preferences,
-        [key]: value,
-      },
-    }));
-  };
+        const mappedUser = {
+          ...userData,
+          userType: userTypeMapping[userData.userType] || "customer",
+        };
 
-  const recentOrders = [
-    {
-      id: 1,
-      date: "2024-01-15",
-      items: 2,
-      total: 178,
-      status: "delivered",
-      image: "👕",
-    },
-    {
-      id: 2,
-      date: "2024-01-10",
-      items: 1,
-      total: 450,
-      status: "shipped",
-      image: "👟",
-    },
-    {
-      id: 3,
-      date: "2024-01-05",
-      items: 3,
-      total: 267,
-      status: "delivered",
-      image: "👖",
-    },
-  ];
+        setUser(mappedUser as unknown as UserType);
 
-  const achievements = [
-    {
-      id: 1,
-      title: "קונה מתחיל",
-      description: "הזמנה ראשונה",
-      icon: "🎉",
-      completed: true,
-    },
-    {
-      id: 2,
-      title: "חבר נאמן",
-      description: "10 הזמנות",
-      icon: "💎",
-      completed: true,
-    },
-    {
-      id: 3,
-      title: "מבקר מומחה",
-      description: "5 ביקורות",
-      icon: "⭐",
-      completed: true,
-    },
-    {
-      id: 4,
-      title: "קונה VIP",
-      description: "50 הזמנות",
-      icon: "👑",
-      completed: false,
-    },
-  ];
+        // עדכון נתוני הפרופיל
+        setProfile({
+          name: userData.name,
+          email: userData.email,
+          phone: userData.phone || "",
+          address: userData.addresses?.[0]
+            ? `${userData.addresses[0].street}, ${userData.addresses[0].city}`
+            : "",
+          image: userData.avatar || "👤",
+          joinDate: userData.createdAt.toISOString().split("T")[0],
+          membershipLevel: getUserMembershipLevel(userData.createdAt),
+          sizes: {
+            shirt: "M",
+            pants: "32",
+            shoes: "42",
+          },
+          preferences: {
+            notifications: true,
+            newsletter: false,
+            promotions: true,
+          },
+        });
 
-  const getMembershipColor = (level: string) => {
-    switch (level) {
-      case "Gold":
-        return "from-yellow-400 to-orange-500";
-      case "Silver":
-        return "from-gray-400 to-gray-500";
-      case "Bronze":
-        return "from-orange-400 to-red-500";
-      default:
-        return "from-purple-400 to-pink-500";
+        // טעינת נתונים סטטיסטיים
+        await loadUserStats(userData.id);
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const ProfileHeader = () => (
-    <div className="card p-8 text-center animate-fadeIn">
-      <div className="relative inline-block mb-6">
-        <div className="w-32 h-32 bg-gradient-to-br from-purple-400 to-pink-500 rounded-full flex items-center justify-center text-6xl text-white animate-pulse-custom">
-          {profile.image}
-        </div>
-        <button className="absolute bottom-0 right-0 w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center text-white hover-scale">
-          <Camera className="w-5 h-5" />
-        </button>
-        <div
-          className={`absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-r ${getMembershipColor(
-            profile.membershipLevel
-          )} rounded-full flex items-center justify-center`}
-        >
-          <Crown className="w-4 h-4 text-white" />
-        </div>
-      </div>
+  const loadUserStats = async (userId: string) => {
+    try {
+      // ספירת הזמנות, מועדפים וביקורות
+      const [orders, favorites] = await Promise.all([
+        getUserOrders(userId).catch(() => []),
+        getUserFavorites(userId).catch(() => []),
+      ]);
 
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">{profile.name}</h1>
-      <p className="text-gray-600 mb-2">{profile.email}</p>
-      <div className="flex items-center justify-center gap-2 mb-4">
-        <span
-          className={`bg-gradient-to-r ${getMembershipColor(
-            profile.membershipLevel
-          )} text-white px-3 py-1 rounded-full text-sm font-bold`}
-        >
-          {profile.membershipLevel} Member
-        </span>
-        <span className="text-gray-500 text-sm">
-          מאז {new Date(profile.joinDate).toLocaleDateString("he-IL")}
-        </span>
-      </div>
+      // כרגע אין פונקציית getUserReviews, נשתמש בערך ברירת מחדל
+      const reviews: any[] = [];
+      const avgRating = 0;
 
-      <div className="flex justify-center gap-4 mb-6">
+      setUserStats({
+        ordersCount: orders.length,
+        favoritesCount: favorites.length,
+        reviewsCount: reviews.length,
+        avgRating: Math.round(avgRating * 10) / 10,
+      });
+    } catch (error) {
+      console.error("Error loading user stats:", error);
+    }
+  };
+
+  const getUserMembershipLevel = (joinDate: Date) => {
+    const monthsSinceJoin = Math.floor(
+      (Date.now() - joinDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
+    );
+
+    if (monthsSinceJoin >= 12) return "Platinum";
+    if (monthsSinceJoin >= 6) return "Gold";
+    if (monthsSinceJoin >= 3) return "Silver";
+    return "Bronze";
+  };
+
+  const getMembershipColor = (level: string) => {
+    switch (level) {
+      case "Platinum":
+        return "from-purple-500 to-pink-500";
+      case "Gold":
+        return "from-yellow-500 to-orange-500";
+      case "Silver":
+        return "from-gray-400 to-gray-600";
+      default:
+        return "from-orange-500 to-red-500";
+    }
+  };
+
+  const getMembershipIcon = (level: string) => {
+    switch (level) {
+      case "Platinum":
+        return Crown;
+      case "Gold":
+        return Award;
+      case "Silver":
+        return Star;
+      default:
+        return Shield;
+    }
+  };
+
+  const handleSave = async () => {
+    // כאן נעדכן את המשתמש במסד הנתונים
+    setEditing(false);
+    // TODO: implement user update API call
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white p-4 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-2xl font-bold text-purple-600">
-            {profile.stats.totalOrders}
-          </div>
-          <div className="text-sm text-gray-600">הזמנות</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-green-600">
-            ₪{profile.stats.totalSpent}
-          </div>
-          <div className="text-sm text-gray-600">סה"כ קניות</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-orange-600">
-            {profile.stats.loyaltyPoints}
-          </div>
-          <div className="text-sm text-gray-600">נקודות</div>
+          <Loader2 className="w-12 h-12 text-gray-600 animate-spin mx-auto mb-4" />
+          <p className="text-lg text-gray-600">טוען פרופיל...</p>
         </div>
       </div>
+    );
+  }
 
-      <button
-        onClick={() => setIsEditing(true)}
-        className="btn-primary flex items-center gap-2 mx-auto"
-      >
-        <Edit2 className="w-4 h-4" />
-        עריכת פרופיל
-      </button>
-    </div>
-  );
-
-  const PersonalInfo = () => (
-    <div className="space-y-6">
-      <div className="card p-6 animate-slideIn">
-        <h3 className="font-bold text-xl text-gray-900 mb-6 flex items-center gap-2">
-          <User className="w-5 h-5 text-purple-600" />
-          פרטים אישיים
-        </h3>
-
-        {isEditing ? (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">שם מלא</label>
-              <input
-                type="text"
-                value={profile.name}
-                onChange={(e) =>
-                  setProfile({ ...profile, name: e.target.value })
-                }
-                className="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-300"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">אימייל</label>
-              <input
-                type="email"
-                value={profile.email}
-                onChange={(e) =>
-                  setProfile({ ...profile, email: e.target.value })
-                }
-                className="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-300"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">טלפון</label>
-              <input
-                type="tel"
-                value={profile.phone}
-                onChange={(e) =>
-                  setProfile({ ...profile, phone: e.target.value })
-                }
-                className="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-300"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">כתובת</label>
-              <input
-                type="text"
-                value={profile.address}
-                onChange={(e) =>
-                  setProfile({ ...profile, address: e.target.value })
-                }
-                className="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-300"
-              />
-            </div>
-            <div className="flex justify-end gap-4">
-              <button
-                onClick={() => setIsEditing(false)}
-                className="px-6 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                ביטול
-              </button>
-              <button onClick={handleSave} className="btn-primary px-6 py-3">
-                שמור
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-              <Mail className="w-5 h-5 text-purple-600" />
-              <div>
-                <p className="font-medium">{profile.email}</p>
-                <p className="text-sm text-gray-600">כתובת אימייל</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-              <Phone className="w-5 h-5 text-green-600" />
-              <div>
-                <p className="font-medium">{profile.phone}</p>
-                <p className="text-sm text-gray-600">מספר טלפון</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-              <MapPin className="w-5 h-5 text-red-600" />
-              <div>
-                <p className="font-medium">{profile.address}</p>
-                <p className="text-sm text-gray-600">כתובת מגורים</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Size Preferences */}
-      <div
-        className="card p-6 animate-slideIn"
-        style={{ animationDelay: "0.1s" }}
-      >
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="font-bold text-xl text-gray-900 flex items-center gap-2">
-            <Ruler className="w-5 h-5 text-blue-600" />
-            מידות מועדפות
-          </h3>
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white p-4 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg text-red-600 mb-4">
+            שגיאה בטעינת פרופיל המשתמש
+          </p>
           <button
-            onClick={() => setIsEditingSizes(!isEditingSizes)}
-            className="text-purple-600 hover:text-purple-800 font-medium"
+            onClick={loadUserData}
+            className="bg-black text-white px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors"
           >
-            {isEditingSizes ? "ביטול" : "עריכה"}
-          </button>
-        </div>
-
-        {isEditingSizes ? (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                מידת חולצה
-              </label>
-              <select
-                value={profile.sizes.shirt}
-                onChange={(e) =>
-                  setProfile({
-                    ...profile,
-                    sizes: { ...profile.sizes, shirt: e.target.value },
-                  })
-                }
-                className="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="S">S</option>
-                <option value="M">M</option>
-                <option value="L">L</option>
-                <option value="XL">XL</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                מידת מכנסיים
-              </label>
-              <select
-                value={profile.sizes.pants}
-                onChange={(e) =>
-                  setProfile({
-                    ...profile,
-                    sizes: { ...profile.sizes, pants: e.target.value },
-                  })
-                }
-                className="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="30">30</option>
-                <option value="32">32</option>
-                <option value="34">34</option>
-                <option value="36">36</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                מידת נעליים
-              </label>
-              <select
-                value={profile.sizes.shoes}
-                onChange={(e) =>
-                  setProfile({
-                    ...profile,
-                    sizes: { ...profile.sizes, shoes: e.target.value },
-                  })
-                }
-                className="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="40">40</option>
-                <option value="41">41</option>
-                <option value="42">42</option>
-                <option value="43">43</option>
-                <option value="44">44</option>
-              </select>
-            </div>
-            <button onClick={handleSaveSizes} className="btn-primary w-full">
-              שמור מידות
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center p-4 bg-blue-50 rounded-xl">
-              <div className="text-2xl mb-2">👕</div>
-              <p className="font-semibold">חולצה</p>
-              <p className="text-lg font-bold text-blue-600">
-                {profile.sizes.shirt}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-green-50 rounded-xl">
-              <div className="text-2xl mb-2">👖</div>
-              <p className="font-semibold">מכנסיים</p>
-              <p className="text-lg font-bold text-green-600">
-                {profile.sizes.pants}
-              </p>
-            </div>
-            <div className="text-center p-4 bg-purple-50 rounded-xl">
-              <div className="text-2xl mb-2">👟</div>
-              <p className="font-semibold">נעליים</p>
-              <p className="text-lg font-bold text-purple-600">
-                {profile.sizes.shoes}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Preferences */}
-      <div
-        className="card p-6 animate-slideIn"
-        style={{ animationDelay: "0.2s" }}
-      >
-        <h3 className="font-bold text-xl text-gray-900 mb-6 flex items-center gap-2">
-          <Bell className="w-5 h-5 text-orange-600" />
-          העדפות התראות
-        </h3>
-
-        <div className="space-y-4">
-          {Object.entries(profile.preferences).map(([key, value], index) => (
-            <div
-              key={key}
-              className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
-            >
-              <div>
-                <p className="font-medium">
-                  {key === "newsletter" && "ניוזלטר"}
-                  {key === "smsNotifications" && "התראות SMS"}
-                  {key === "emailNotifications" && "התראות אימייל"}
-                  {key === "personalizedOffers" && "הצעות מותאמות אישית"}
-                </p>
-                <p className="text-sm text-gray-600">
-                  {key === "newsletter" &&
-                    "קבל עדכונים על מוצרים חדשים ומבצעים"}
-                  {key === "smsNotifications" && "התראות SMS על הזמנות ומבצעים"}
-                  {key === "emailNotifications" &&
-                    "התראות אימייל על פעילות החשבון"}
-                  {key === "personalizedOffers" &&
-                    "הצעות מותאמות בהתאם להעדפות שלך"}
-                </p>
-              </div>
-              <button
-                onClick={() => updatePreference(key, !value)}
-                className={`relative w-14 h-7 rounded-full transition-all duration-300 ${
-                  value ? "bg-gradient-primary" : "bg-gray-300"
-                }`}
-              >
-                <div
-                  className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-lg transition-all duration-300 transform ${
-                    value ? "translate-x-7" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const OrderHistory = () => (
-    <div className="space-y-6">
-      <div className="card p-6 animate-slideIn">
-        <h3 className="font-bold text-xl text-gray-900 mb-6 flex items-center gap-2">
-          <Package className="w-5 h-5 text-blue-600" />
-          הזמנות אחרונות
-        </h3>
-
-        <div className="space-y-4">
-          {recentOrders.map((order, index) => (
-            <div
-              key={order.id}
-              className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover-lift"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-pink-100 rounded-xl flex items-center justify-center text-2xl">
-                  {order.image}
-                </div>
-                <div>
-                  <p className="font-semibold">הזמנה #{order.id}</p>
-                  <p className="text-sm text-gray-600">
-                    {order.items} פריטים •{" "}
-                    {new Date(order.date).toLocaleDateString("he-IL")}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-lg">₪{order.total}</p>
-                <span
-                  className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                    order.status === "delivered"
-                      ? "bg-green-100 text-green-800"
-                      : order.status === "shipped"
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  }`}
-                >
-                  {order.status === "delivered"
-                    ? "נמסר"
-                    : order.status === "shipped"
-                    ? "נשלח"
-                    : "בטיפול"}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Achievements */}
-      <div
-        className="card p-6 animate-slideIn"
-        style={{ animationDelay: "0.1s" }}
-      >
-        <h3 className="font-bold text-xl text-gray-900 mb-6 flex items-center gap-2">
-          <Award className="w-5 h-5 text-yellow-600" />
-          הישגים
-        </h3>
-
-        <div className="grid grid-cols-2 gap-4">
-          {achievements.map((achievement, index) => (
-            <div
-              key={achievement.id}
-              className={`p-4 rounded-xl border-2 transition-all duration-300 ${
-                achievement.completed
-                  ? "bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200"
-                  : "bg-gray-50 border-gray-200"
-              }`}
-            >
-              <div className="text-center">
-                <div className="text-3xl mb-2">{achievement.icon}</div>
-                <h4 className="font-semibold text-gray-900">
-                  {achievement.title}
-                </h4>
-                <p className="text-sm text-gray-600">
-                  {achievement.description}
-                </p>
-                {achievement.completed && (
-                  <div className="mt-2">
-                    <Check className="w-5 h-5 text-green-600 mx-auto" />
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const AccountSettings = () => (
-    <div className="space-y-6">
-      <div className="card p-6 animate-slideIn">
-        <h3 className="font-bold text-xl text-gray-900 mb-6 flex items-center gap-2">
-          <Shield className="w-5 h-5 text-green-600" />
-          אבטחה וחשבון
-        </h3>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover-lift cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-medium">שנה סיסמה</p>
-                <p className="text-sm text-gray-600">
-                  עדכן את סיסמת החשבון שלך
-                </p>
-              </div>
-            </div>
-            <div className="text-gray-400">
-              <Edit2 className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover-lift cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CreditCard className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="font-medium">אמצעי תשלום</p>
-                <p className="text-sm text-gray-600">
-                  נהל כרטיסי אשראי ואמצעי תשלום
-                </p>
-              </div>
-            </div>
-            <div className="text-gray-400">
-              <Edit2 className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover-lift cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Truck className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="font-medium">כתובות משלוח</p>
-                <p className="text-sm text-gray-600">נהל כתובות משלוח</p>
-              </div>
-            </div>
-            <div className="text-gray-400">
-              <Edit2 className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Account Actions */}
-      <div
-        className="card p-6 animate-slideIn"
-        style={{ animationDelay: "0.1s" }}
-      >
-        <h3 className="font-bold text-xl text-gray-900 mb-6 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-gray-600" />
-          פעולות חשבון
-        </h3>
-
-        <div className="space-y-4">
-          <button className="w-full flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-xl hover:bg-yellow-100 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <RotateCcw className="w-5 h-5 text-yellow-600" />
-              </div>
-              <div className="text-left">
-                <p className="font-medium text-yellow-800">ייצוא נתונים</p>
-                <p className="text-sm text-yellow-600">
-                  הורד את כל הנתונים שלך
-                </p>
-              </div>
-            </div>
-          </button>
-
-          <button className="w-full flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <X className="w-5 h-5 text-red-600" />
-              </div>
-              <div className="text-left">
-                <p className="font-medium text-red-800">מחק חשבון</p>
-                <p className="text-sm text-red-600">מחיקה קבועה של החשבון</p>
-              </div>
-            </div>
+            נסה שוב
           </button>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white p-4">
       {/* Background Decorations */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full opacity-10 animate-float" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-purple-300 to-pink-300 rounded-full opacity-10 animate-float" />
         <div
-          className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full opacity-10 animate-float"
+          className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-blue-300 to-purple-300 rounded-full opacity-10 animate-float"
           style={{ animationDelay: "2s" }}
         />
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full opacity-5 animate-pulse-custom" />
       </div>
 
-      <div className="relative z-10">
-        <div className="max-w-6xl mx-auto p-4 py-8">
-          {/* Profile Header */}
-          <ProfileHeader />
+      <div className="max-w-6xl mx-auto relative z-10">
+        {/* Header */}
+        <div className="text-center mb-8 animate-fadeIn">
+          <h1 className="text-4xl font-bold text-gradient mb-2">הפרופיל שלי</h1>
+          <p className="text-gray-600 text-lg">נהל את הפרטים האישיים שלך</p>
+        </div>
 
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 mb-8 mt-8">
-            {[
-              { id: "info", label: "פרטים אישיים", icon: User },
-              { id: "orders", label: "הזמנות והישגים", icon: Package },
-              { id: "settings", label: "הגדרות חשבון", icon: Settings },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 font-medium transition-all duration-300 ${
-                  activeTab === tab.id
-                    ? "text-purple-600 border-b-2 border-purple-600"
-                    : "text-gray-600 hover:text-purple-600"
-                }`}
-              >
-                <tab.icon className="w-5 h-5" />
-                {tab.label}
+        {/* Profile Card */}
+        <div className="card mb-8 animate-slideIn">
+          <div className="flex flex-col md:flex-row items-center gap-6 mb-6">
+            {/* Profile Image */}
+            <div className="relative group">
+              <div className="w-32 h-32 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center text-6xl animate-bounce-custom">
+                {profile.image}
+              </div>
+              <button className="absolute bottom-0 right-0 w-10 h-10 bg-black text-white rounded-full flex items-center justify-center hover:bg-gray-800 transition-all duration-300 hover-scale">
+                <Camera className="w-5 h-5" />
               </button>
-            ))}
+            </div>
+
+            {/* Profile Info */}
+            <div className="flex-1 text-center md:text-right">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-3xl font-bold text-gray-900">
+                  {profile.name}
+                </h2>
+                <button
+                  onClick={() => setEditing(!editing)}
+                  className="btn-secondary flex items-center gap-2 hover-scale"
+                >
+                  {editing ? (
+                    <X className="w-4 h-4" />
+                  ) : (
+                    <Edit2 className="w-4 h-4" />
+                  )}
+                  {editing ? "בטל" : "ערוך"}
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <p className="text-gray-600 flex items-center gap-2 justify-center md:justify-start">
+                  <Mail className="w-4 h-4" />
+                  {profile.email}
+                </p>
+                <p className="text-gray-600 flex items-center gap-2 justify-center md:justify-start">
+                  <Phone className="w-4 h-4" />
+                  {profile.phone || "לא הוזן מספר טלפון"}
+                </p>
+                <p className="text-gray-600 flex items-center gap-2 justify-center md:justify-start">
+                  <MapPin className="w-4 h-4" />
+                  {profile.address || "לא הוזנה כתובת"}
+                </p>
+                <p className="text-gray-600 flex items-center gap-2 justify-center md:justify-start">
+                  <Calendar className="w-4 h-4" />
+                  חבר מאז{" "}
+                  {new Date(profile.joinDate).toLocaleDateString("he-IL")}
+                </p>
+              </div>
+
+              {/* Membership Badge */}
+              <div
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r ${getMembershipColor(
+                  profile.membershipLevel
+                )} text-white font-semibold animate-glow`}
+              >
+                {(() => {
+                  const IconComponent = getMembershipIcon(
+                    profile.membershipLevel
+                  );
+                  return <IconComponent className="w-5 h-5" />;
+                })()}
+                חבר {profile.membershipLevel}
+              </div>
+            </div>
           </div>
 
-          {/* Tab Content */}
-          <div>
-            {activeTab === "info" && <PersonalInfo />}
-            {activeTab === "orders" && <OrderHistory />}
-            {activeTab === "settings" && <AccountSettings />}
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl animate-fadeIn">
+              <Package className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+              <p className="text-2xl font-bold text-blue-600">
+                {userStats.ordersCount}
+              </p>
+              <p className="text-sm text-gray-600">הזמנות</p>
+            </div>
+            <div
+              className="text-center p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-xl animate-fadeIn"
+              style={{ animationDelay: "0.1s" }}
+            >
+              <Heart className="w-8 h-8 text-red-500 mx-auto mb-2" />
+              <p className="text-2xl font-bold text-red-500">
+                {userStats.favoritesCount}
+              </p>
+              <p className="text-sm text-gray-600">מועדפים</p>
+            </div>
+            <div
+              className="text-center p-4 bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl animate-fadeIn"
+              style={{ animationDelay: "0.2s" }}
+            >
+              <Star className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+              <p className="text-2xl font-bold text-yellow-500">
+                {userStats.reviewsCount}
+              </p>
+              <p className="text-sm text-gray-600">ביקורות</p>
+            </div>
+            <div
+              className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-xl animate-fadeIn"
+              style={{ animationDelay: "0.3s" }}
+            >
+              <Award className="w-8 h-8 text-green-500 mx-auto mb-2" />
+              <p className="text-2xl font-bold text-green-500">
+                {userStats.avgRating || "—"}
+              </p>
+              <p className="text-sm text-gray-600">דירוג ממוצע</p>
+            </div>
           </div>
+        </div>
+
+        {/* Edit Form */}
+        {editing && (
+          <div className="card mb-8 animate-slideIn">
+            <h3 className="text-2xl font-bold text-gradient mb-6">
+              עריכת פרטים אישיים
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  שם מלא
+                </label>
+                <input
+                  type="text"
+                  value={profile.name}
+                  onChange={(e) =>
+                    setProfile({ ...profile, name: e.target.value })
+                  }
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  אימייל
+                </label>
+                <input
+                  type="email"
+                  value={profile.email}
+                  onChange={(e) =>
+                    setProfile({ ...profile, email: e.target.value })
+                  }
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  טלפון
+                </label>
+                <input
+                  type="tel"
+                  value={profile.phone}
+                  onChange={(e) =>
+                    setProfile({ ...profile, phone: e.target.value })
+                  }
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  כתובת
+                </label>
+                <input
+                  type="text"
+                  value={profile.address}
+                  onChange={(e) =>
+                    setProfile({ ...profile, address: e.target.value })
+                  }
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex gap-4 mt-6">
+              <button
+                onClick={handleSave}
+                className="btn-primary flex items-center gap-2 hover-scale"
+              >
+                <Check className="w-4 h-4" />
+                שמור שינויים
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="btn-secondary flex items-center gap-2 hover-scale"
+              >
+                <X className="w-4 h-4" />
+                בטל
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="card p-6 text-center hover-lift cursor-pointer animate-slideIn">
+            <Heart className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              המועדפים שלי
+            </h3>
+            <p className="text-gray-600 text-sm mb-4">כל הפריטים שאהבת</p>
+            <button className="btn-secondary w-full">צפה במועדפים</button>
+          </div>
+
+          <div
+            className="card p-6 text-center hover-lift cursor-pointer animate-slideIn"
+            style={{ animationDelay: "0.1s" }}
+          >
+            <Package className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              ההזמנות שלי
+            </h3>
+            <p className="text-gray-600 text-sm mb-4">מעקב אחר הזמנות</p>
+            <button className="btn-secondary w-full">צפה בהזמנות</button>
+          </div>
+
+          <div
+            className="card p-6 text-center hover-lift cursor-pointer animate-slideIn"
+            style={{ animationDelay: "0.2s" }}
+          >
+            <Settings className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">הגדרות</h3>
+            <p className="text-gray-600 text-sm mb-4">נהל את ההעדפות שלך</p>
+            <button className="btn-secondary w-full">פתח הגדרות</button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div
+          className="text-center mt-12 animate-fadeIn"
+          style={{ animationDelay: "0.4s" }}
+        >
+          <p className="text-gray-600 flex items-center justify-center gap-2">
+            <Heart className="w-4 h-4 text-gray-500" />
+            תודה שאתה חלק מהקהילה שלנו
+          </p>
         </div>
       </div>
     </div>

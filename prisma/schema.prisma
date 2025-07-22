@@ -1,0 +1,422 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model with different user types
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  avatar    String?
+  userType  UserType @default(CUSTOMER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // User can have multiple addresses
+  addresses Address[]
+
+  // User orders
+  orders Order[]
+
+  // User reviews
+  reviews Review[]
+
+  // User's favorite products
+  favorites FavoriteProduct[]
+
+  // User's cart items
+  cartItems CartItem[]
+
+  // Stores owned by this user
+  ownedStores Store[]
+
+  // Secondhand products sold by this user
+  secondhandProducts SecondhandProduct[]
+
+  @@map("users")
+}
+
+enum UserType {
+  CUSTOMER
+  STORE_OWNER
+  SECONDHAND_SELLER
+  HYBRID // Customer + Secondhand Seller
+  ADMIN
+}
+
+// Store categories
+model StoreCategory {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  icon   String
+  color  String
+  stores Store[]
+
+  @@map("store_categories")
+}
+
+// Store model
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  logo        String?
+  banner      String?
+  rating      Float    @default(0)
+  reviewCount Int      @default(0)
+  isOpen      Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Store owner
+  owner   User   @relation(fields: [ownerId], references: [id])
+  ownerId String
+
+  // Store category
+  category   StoreCategory @relation(fields: [categoryId], references: [id])
+  categoryId String
+
+  // Store contact info
+  phone   String?
+  email   String?
+  website String?
+
+  // Store address
+  addresses Address[]
+
+  // Store hours
+  storeHours StoreHours[]
+
+  // Store delivery info
+  minOrderAmount        Float @default(0)
+  deliveryFee           Float @default(0)
+  freeDeliveryThreshold Float @default(0)
+  estimatedTimeMin      Int   @default(30)
+  estimatedTimeMax      Int   @default(60)
+  deliveryRadius        Float @default(10)
+
+  // Store products
+  products Product[]
+
+  // Store orders
+  orders Order[]
+
+  // Store reviews
+  reviews Review[]
+
+  @@map("stores")
+}
+
+// Store hours
+model StoreHours {
+  id        String  @id @default(cuid())
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId   String
+  dayOfWeek Int // 0 = Sunday, 1 = Monday, etc.
+  openTime  String?
+  closeTime String?
+  isClosed  Boolean @default(false)
+
+  @@unique([storeId, dayOfWeek])
+  @@map("store_hours")
+}
+
+// Address model (for users and stores)
+model Address {
+  id         String  @id @default(cuid())
+  label      String
+  street     String
+  city       String
+  postalCode String?
+  latitude   Float?
+  longitude  Float?
+  isDefault  Boolean @default(false)
+
+  // Can belong to either user or store
+  user    User?   @relation(fields: [userId], references: [id])
+  userId  String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String?
+
+  // Orders delivered to this address
+  orders Order[]
+
+  @@map("addresses")
+}
+
+// Product categories
+model ProductCategory {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  icon     String
+  products Product[]
+
+  @@map("product_categories")
+}
+
+// Product model
+model Product {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  price         Float
+  originalPrice Float?
+  images        String[] // Array of image URLs
+  brand         String?
+  tags          String[]
+  inStock       Boolean   @default(true)
+  stockQuantity Int       @default(0)
+  rating        Float     @default(0)
+  reviewCount   Int       @default(0)
+  isOnSale      Boolean   @default(false)
+  saleEndDate   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Product belongs to a store
+  store   Store  @relation(fields: [storeId], references: [id])
+  storeId String
+
+  // Product category
+  category   ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId String
+
+  // Product sizes
+  sizes ProductSize[]
+
+  // Product colors
+  colors ProductColor[]
+
+  // Product in orders
+  orderItems OrderItem[]
+
+  // Product reviews
+  reviews Review[]
+
+  // Product in favorites
+  favorites FavoriteProduct[]
+
+  // Product in carts
+  cartItems CartItem[]
+
+  @@map("products")
+}
+
+// Product sizes
+model ProductSize {
+  id          String   @id @default(cuid())
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   String
+  name        String // S, M, L, XL, 40, 41, etc.
+  type        SizeType
+  isAvailable Boolean  @default(true)
+
+  @@map("product_sizes")
+}
+
+enum SizeType {
+  CLOTHING
+  SHOES
+  ACCESSORIES
+  OTHER
+}
+
+// Product colors
+model ProductColor {
+  id          String  @id @default(cuid())
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   String
+  name        String
+  hexCode     String
+  isAvailable Boolean @default(true)
+
+  @@map("product_colors")
+}
+
+// Orders
+model Order {
+  id                String      @id @default(cuid())
+  orderNumber       String      @unique
+  status            OrderStatus @default(PENDING)
+  totalAmount       Float
+  deliveryFee       Float       @default(0)
+  discountAmount    Float       @default(0)
+  notes             String?
+  estimatedDelivery DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Order belongs to user
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  // Order from store
+  store   Store  @relation(fields: [storeId], references: [id])
+  storeId String
+
+  // Delivery address
+  deliveryAddress   Address @relation(fields: [deliveryAddressId], references: [id])
+  deliveryAddressId String
+
+  // Order items
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_DELIVERY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+// Order items
+model OrderItem {
+  id            String  @id @default(cuid())
+  quantity      Int
+  price         Float
+  totalPrice    Float
+  selectedSize  String?
+  selectedColor String?
+
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+
+  @@map("order_items")
+}
+
+// Reviews
+model Review {
+  id                 String   @id @default(cuid())
+  rating             Int // 1-5 stars
+  title              String?
+  comment            String?
+  images             String[]
+  isVerifiedPurchase Boolean  @default(false)
+  helpfulCount       Int      @default(0)
+  notHelpfulCount    Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Review by user
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  // Review for product
+  product   Product? @relation(fields: [productId], references: [id])
+  productId String?
+
+  // Review for store
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String?
+
+  // Store response
+  storeResponse StoreResponse?
+
+  @@map("reviews")
+}
+
+// Store response to reviews
+model StoreResponse {
+  id        String   @id @default(cuid())
+  message   String
+  createdAt DateTime @default(now())
+
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId String @unique
+
+  @@map("store_responses")
+}
+
+// User favorite products
+model FavoriteProduct {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+
+  @@unique([userId, productId])
+  @@map("favorite_products")
+}
+
+// Shopping cart
+model CartItem {
+  id            String   @id @default(cuid())
+  quantity      Int      @default(1)
+  selectedSize  String?
+  selectedColor String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+
+  @@unique([userId, productId, selectedSize, selectedColor])
+  @@map("cart_items")
+}
+
+// Secondhand products (for individual sellers)
+model SecondhandProduct {
+  id          String              @id @default(cuid())
+  title       String
+  description String?
+  price       Float
+  condition   SecondhandCondition
+  category    String
+  images      String[]
+  status      SecondhandStatus    @default(ACTIVE)
+  views       Int                 @default(0)
+  likes       Int                 @default(0)
+  messages    Int                 @default(0)
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  seller   User   @relation(fields: [sellerId], references: [id])
+  sellerId String
+
+  @@map("secondhand_products")
+}
+
+enum SecondhandCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum SecondhandStatus {
+  DRAFT
+  ACTIVE
+  SOLD
+  REMOVED
+}
